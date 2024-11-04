@@ -80,7 +80,7 @@ const RealTimeImageRecognition: React.FC = () => {
             context.fillStyle = "red";
             context.font = "16px Arial";
             context.fillText(
-              `${labels[classLabels[i]] + 1}, Score: ${(
+              `${labels[classLabels[i] - 1]}, Score: ${(
                 scores[i] * 100
               ).toFixed(1)}%`,
               x,
