@@ -7,6 +7,8 @@ const RealTimeImageRecognition: React.FC = () => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [model, setModel] = useState<tf.GraphModel | null>(null);
+  const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
+  const [selectedDeviceId, setSelectedDeviceId] = useState<string | null>(null);
 
   useEffect(() => {
     const loadModel = async () => {
@@ -21,11 +23,22 @@ const RealTimeImageRecognition: React.FC = () => {
       }
     };
 
-    const setupCamera = async () => {
+    const fetchDevices = async () => {
+      const mediaDevices = await navigator.mediaDevices.enumerateDevices();
+      const videoDevices = mediaDevices.filter(
+        (device) => device.kind === "videoinput"
+      );
+      setDevices(videoDevices);
+      if (videoDevices.length > 0) {
+        setSelectedDeviceId(videoDevices[0].deviceId); // デフォルトで最初のカメラを選択
+      }
+    };
+
+    const setupCamera = async (deviceId?: string) => {
       if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
         try {
           const stream = await navigator.mediaDevices.getUserMedia({
-            video: true,
+            video: { deviceId: deviceId ? { exact: deviceId } : undefined },
           });
           if (videoRef.current) {
             videoRef.current.srcObject = stream;
@@ -38,8 +51,13 @@ const RealTimeImageRecognition: React.FC = () => {
     };
 
     loadModel();
-    setupCamera();
-  }, []);
+    fetchDevices();
+    setupCamera(selectedDeviceId ?? undefined);
+  }, [selectedDeviceId]);
+
+  const handleDeviceChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
+    setSelectedDeviceId(event.target.value);
+  };
 
   const detectObjects = async () => {
     if (model && videoRef.current && canvasRef.current) {
@@ -56,12 +74,10 @@ const RealTimeImageRecognition: React.FC = () => {
         )) as tf.Tensor[];
         imageTensor.dispose();
 
-        // 型アサーションを使用して正しい型を指定
-        const classLabels = (predictions[0].arraySync() as number[][])[0]; // クラスラベル
-        const boxes = (predictions[1].arraySync() as number[][][])[0]; // バウンディングボックス座標
-        const scores = predictions[4].dataSync() as Float32Array; // スコア
+        const classLabels = (predictions[0].arraySync() as number[][])[0];
+        const boxes = (predictions[1].arraySync() as number[][][])[0];
+        const scores = predictions[4].dataSync() as Float32Array;
 
-        // スコアが0.5以上のもののみ描画
         const threshold = 0.5;
         for (let i = 0; i < scores.length; i++) {
           if (scores[i] > threshold) {
@@ -71,12 +87,10 @@ const RealTimeImageRecognition: React.FC = () => {
             const width = (x2 - x1) * canvas.width;
             const height = (y2 - y1) * canvas.height;
 
-            // バウンディングボックスを描画
             context.strokeStyle = "red";
             context.lineWidth = 2;
             context.strokeRect(x, y, width, height);
 
-            // クラスラベルとスコアを表示
             context.fillStyle = "red";
             context.font = "16px Arial";
             context.fillText(
@@ -95,13 +109,23 @@ const RealTimeImageRecognition: React.FC = () => {
   };
 
   useEffect(() => {
-    const intervalId = setInterval(detectObjects, 100); // 100msごとに検出
+    const intervalId = setInterval(detectObjects, 100);
     return () => clearInterval(intervalId);
   }, [model]);
 
   return (
     <div>
       <h1>HコースD班くま寿司の寿司検出！！</h1>
+      <div>
+        <label htmlFor="camera-select">カメラを選択: </label>
+        <select id="camera-select" onChange={handleDeviceChange}>
+          {devices.map((device) => (
+            <option key={device.deviceId} value={device.deviceId}>
+              {device.label || `Camera ${device.deviceId}`}
+            </option>
+          ))}
+        </select>
+      </div>
       <video
         ref={videoRef}
         width="640"
