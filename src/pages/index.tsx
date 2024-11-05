@@ -7,8 +7,7 @@ const RealTimeImageRecognition: React.FC = () => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [model, setModel] = useState<tf.GraphModel | null>(null);
-  const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
-  const [useBackCamera, setUseBackCamera] = useState(true);
+  const [aspectRatio, setAspectRatio] = useState<number | null>(null);
 
   useEffect(() => {
     const loadModel = async () => {
@@ -23,34 +22,19 @@ const RealTimeImageRecognition: React.FC = () => {
       }
     };
 
-    const fetchDevices = async () => {
-      const mediaDevices = await navigator.mediaDevices.enumerateDevices();
-      const videoDevices = mediaDevices.filter(
-        (device) => device.kind === "videoinput"
-      );
-      setDevices(videoDevices);
-    };
-
-    const setupCamera = async (useBack: boolean) => {
+    const setupCamera = async () => {
       if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
         try {
-          const backCamera = devices.find((device) =>
-            device.label.toLowerCase().includes("back")
-          );
-          const frontCamera = devices.find((device) =>
-            device.label.toLowerCase().includes("front")
-          );
-
-          const selectedDevice = useBack ? backCamera : frontCamera;
-          const deviceId = selectedDevice?.deviceId;
-
           const stream = await navigator.mediaDevices.getUserMedia({
-            video: deviceId ? { deviceId: { exact: deviceId } } : true,
+            video: { facingMode: { exact: "environment" } }, // 外カメラを指定
           });
-
           if (videoRef.current) {
             videoRef.current.srcObject = stream;
-            videoRef.current.play();
+            videoRef.current.onloadedmetadata = () => {
+              const video = videoRef.current!;
+              setAspectRatio(video.videoWidth / video.videoHeight); // アスペクト比を設定
+              video.play();
+            };
           }
         } catch (error) {
           console.error("Failed to access the camera:", error);
@@ -59,13 +43,8 @@ const RealTimeImageRecognition: React.FC = () => {
     };
 
     loadModel();
-    fetchDevices();
-    setupCamera(useBackCamera); // 外カメラを最初に設定
-  }, [useBackCamera, devices]);
-
-  const handleCameraToggle = () => {
-    setUseBackCamera((prev) => !prev); // カメラを切り替え
-  };
+    setupCamera();
+  }, []);
 
   const detectObjects = async () => {
     if (model && videoRef.current && canvasRef.current) {
@@ -124,28 +103,24 @@ const RealTimeImageRecognition: React.FC = () => {
   return (
     <div style={{ textAlign: "center" }}>
       <h1>HコースD班くま寿司の寿司検出！！</h1>
-      <button onClick={handleCameraToggle}>
-        {useBackCamera ? "内カメラに切り替え" : "外カメラに切り替え"}
-      </button>
       <div
         style={{
           position: "relative",
           width: "100%",
           maxWidth: "640px",
-          aspectRatio: "4 / 3",
           margin: "0 auto",
         }}
       >
         <video
           ref={videoRef}
           style={{
-            width: "100%",
-            height: "auto",
             display: "none",
           }}
         />
         <canvas
           ref={canvasRef}
+          width={aspectRatio ? 640 : undefined}
+          height={aspectRatio ? 640 / aspectRatio : undefined}
           style={{
             width: "100%",
             height: "auto",
